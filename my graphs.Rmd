@@ -1,0 +1,126 @@
+---
+title: "My Fault - Anyflights Package Doesn't Have Geographic Data"
+output: html_document
+date: "2024-04-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Was there a time when you felt like a genius only to realize you had overlooked something obvious? In this project, I initially believed that the 'anyflights' package did not include longitude and latitude information for airports. Consequently, I imported the 'us_map' package to extract geographical information about each state. However, I encountered an issue when merging my datasets, as 'us_map' provided information at the state level rather than for individual airports. To address this, I calculated the average longitude and latitude for each state and matched airports to their corresponding states. This allowed me to successfully merge the datasets and create a visualization of flight routes using ggplot. I felt like a genius! That is, until I discovered that the 'anyflights' package did indeed include longitude and latitude information for each airport.
+
+```{r cars}
+library("anyflights")
+library("dplyr")
+
+data <- read.csv("combined_flights_weather.csv")
+
+data <- data %>%
+  filter(year.x == 2021) %>% # This is a switch to see the flights traces from any year interesting
+  select(origin, dest)
+
+
+library(maps)
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+airport_states <- data.frame(
+  airport = c("JFK","LAX","RSW", "SJU", "BQN", "FLL", "BUF", "MCO", "MIA", "ATL", "ORD", "DFW","DEN", "CLT", "SFO", "SEA", "PHX", "BOS", "SLC", "SYR", "CHS","LAS", "MSP", "ROC", "PSP","SRQ", "TPA", "MSY", "RDU", "JAX","SNA", "PBI", "SJC", "IAD", "SAN", "SAV", "STT", "DAB", "LGB", "BWI","DTW", "PDX", "PWM", "HNL", "BUR", "EGE", "BTV", "DCA", "AUS", "ORF",
+              "IND", "BNA", "HOU", "CLE", "CVG", "RIC", "PIT", "CMH", "SAT", "SMF",
+              "ONT", "RNO", "OAK", "PSE", "ABQ", "ORH", "JAC", "IAH", "HDN", "ACK",
+              "BZN", "EYW", "EWR", "PHL", "DAL", "ASE", "MRY", "OGG", "MDW", "LIH",
+              "COS", "MFR", "SBP", "KOA", "TUS", "ACV", "FAT", "STL", "RDM", "SBA",
+              "ELP", "SGF", "SUN", "MMH", "BOI", "SGU", "ITO", "OMA", 
+              "MKE","MEM", "PRC", "GEG", "BDL", "ANC", "MTJ", "PVU", "TUL", "OKC",
+              "STS", "RDD", "MSN", "PSC", "MSO", "GRR", "PAE"),
+  state = c("new york", "california", "florida", "puerto rico", "puerto rico", "california", "new york","florida", "florida", "georgia", "illinois", "texas","colorado", 
+            "north carolina", "california", "washington", "arizona", "massachusetts", 
+            "utah", "new york", "south carolina", "nevada", "louisiana", "new york", 
+            "california", 
+            "florida", "florida","louisiana", "north carolina","florida",
+            "california", "wyoming", "california", "virginia", "california", "georgia", "virgin islands", "florida", "california", "maryland","michigan", "oregon", "maine", "hawaii", "california", "colorado", "vermont", "virginia", "texas", "virginia",
+            "indiana", "tennessee","texas", "ohio", "kentucky", "virginia", "pennsylvania", "ohio", "texas","california",
+            "california", "nevada", "california", "puerto rico", "new mexico", "massachusetts", "wyoming", "florida", "new jersey", "massachusetts",
+            "montana", "florida", "new jersey","pensylvania", "texas", "colorado", "california", "hawaii", "illinois", "hawaii",
+            "colorado", "oregon", "california", "hawaii", "arizona","california", "california", "missouri", "oregon", "california",
+            "texas", "missouri", "idaho", "california","idaho", "utah", "hawaii", "nebraska", 
+            "wisconsin", "tennessee","arizona","washington","connecticut","alaska","colorado","utah", "oklahoma","oklahoma",
+            "california", "california", "wisconsin", "washington", "montana", "michigan", 
+            "washington")
+)
+
+nrow(airport_states$airport) == nrow(airport_states$state)
+
+data$dest <- airport_states$state[match(data$dest, airport_states$airport)]
+
+
+
+# 1. Merge the average latitude and longitude for each state into our data table
+states <- map_data("state")
+
+us_state_coords <- states %>%
+  group_by(region) %>%
+  summarize(avg_long = mean(long),
+            avg_lat = mean(lat))
+
+
+# 2. Merge the latitude and longitude of states with "data" using state names
+
+airport_states <- airport_states %>%
+  mutate(state = tolower(state))
+
+state_coords_merged <- inner_join(us_state_coords, airport_states, by = c("region" = "state"))
+ 
+data_with_coords <- inner_join(data, state_coords_merged, by = c("dest" = "region"))
+
+
+# 3. Merge the latitude and longitude information for JFK and LAX into the existing table as well
+lax_coords <- us_state_coords %>%
+  filter(region == "california") %>%
+  select(avg_long, avg_lat)
+
+jfk_coords <- us_state_coords %>%
+  filter(region == "new york") %>%
+  select(avg_long, avg_lat)
+
+state_coords_merged <- data_with_coords %>%
+  mutate(jfk_long = ifelse(origin == "JFK", jfk_coords$avg_long, NA),
+         jfk_lat = ifelse(origin == "JFK", jfk_coords$avg_lat, NA),
+         lax_long = ifelse(origin == "LAX", lax_coords$avg_long, NA),
+         lax_lat = ifelse(origin == "LAX", lax_coords$avg_lat, NA))
+
+
+# 4. Plotting flight routes from LAX and JFK airports to airports nationwide
+us_states <- map_data("state")
+
+jfk_data <- data.frame(region = "new york", avg_long = jfk_coords$avg_long, avg_lat = jfk_coords$avg_lat)
+lax_data <- data.frame(region = "california", avg_long = lax_coords$avg_long, avg_lat = lax_coords$avg_lat)
+
+us_states <- map_data("state")
+
+jfk_data <- data.frame(region = "new york", avg_long = jfk_coords$avg_long, avg_lat = jfk_coords$avg_lat)
+lax_data <- data.frame(region = "california", avg_long = lax_coords$avg_long, avg_lat = lax_coords$avg_lat)
+
+segment_counts <- data.frame(Airport = c("JFK", "LAX"),
+                             Count = c(sum(!is.na(state_coords_merged$jfk_long)),
+                                       sum(!is.na(state_coords_merged$lax_long))))
+
+ggplot(state_coords_merged, aes(x = avg_long, y = avg_lat)) +
+  geom_polygon(data = us_states, aes(x = long, y = lat, group = group), fill = "grey90", color = "black") +
+  geom_point() +
+  geom_segment(aes(x = jfk_long, y = jfk_lat, xend = avg_long, yend = avg_lat), color = "#00AFBB") +  # Draw segments connecting to JFK
+  geom_segment(aes(x = lax_long, y = lax_lat, xend = avg_long, yend = avg_lat), color = "#C4961A") +  # Draw segments connecting to LAX
+  geom_text(data = jfk_data, aes(x = avg_long, y = avg_lat, label = "JFK"), color = "#00AFBB", size = 3, vjust = -0.5) +
+  geom_text(data = lax_data, aes(x = avg_long, y = avg_lat, label = "LAX"), color = "#C4961A", size = 3, vjust = -0.5) +
+  labs(title = "Flight Routes from LAX and JFK Airports to Airports Across the Country (2021)",
+       x = "Longitude", y = "Latitude",
+       color = "Origin Airport",
+       subtitle = "Number of flights:",
+       caption = paste("JFK:", segment_counts$Count[1], "\n", "LAX:", segment_counts$Count[2])) +
+  theme_minimal()
+
+```
+
