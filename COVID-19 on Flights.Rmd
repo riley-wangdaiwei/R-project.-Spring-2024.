@@ -1,0 +1,168 @@
+---
+title: "The Effect of COVID-19 on US Flights"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-03-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1. Research Question
+How did the average flight delay time and number of flights change between JFK and LAX in the first quarter of 2019 compared to that of 2021?
+
+## 2. Rationale for the Research Question
+The research question was chosen primarily because JFK and LAX are two of the largest and busiest airports in the U.S., making them key hubs for both domestic and international flights. By focusing on these airports, the study aims to provide insights into the effect of COVID-19 on major air traffic flows across the U.S. The decision to compare the first quarters of 2019 and 2021 allows us to understand the specific impacts of the pandemic on air travel operations, since 2019 represents a normal operational period before COVID-19, while 2021 introduced pandemic-related restrictions like travel bans and quarantine mandates. This comparison will not only highlight how such conditions affected flight delays and the number of flights but also provide insights into how airlines and governments can improve their strategies and responses in future crises. 
+
+## 3. Data Selection
+
+```{r}
+
+library("anyflights")
+library("dplyr")
+library(maps)
+library(tidyverse)
+library(nycflights13)
+library(plotly)
+library(knitr)
+library(rmarkdown)
+
+JFK19 <- get_flights("JFK", year=2019, month=1:3)
+JFK21 <- get_flights("JFK", year=2021, month=1:3)
+LAX19 <- get_flights("LAX", year=2019, month=1:3)
+LAX21 <- get_flights("LAX", year=2021, month=1:3)
+
+
+combined_data <- bind_rows(JFK19, JFK21, LAX19, LAX21)
+
+write.csv(combined_data, "combined_flights.csv")
+
+
+
+```
+
+
+## 4. Analytical Approach and Visual Findings
+
+```{r}
+
+#Average Departure Delay
+combined_data %>%
+  mutate(week = week(time_hour)) %>%
+  group_by(year, origin, week) %>%
+  summarise(avg_delay = mean(dep_delay, na.rm = TRUE), .groups = 'drop') %>%
+  ggplot(aes(x = week, y = avg_delay, color = factor(year))) +
+  geom_line() +
+  theme_bw() +
+  labs(title = 'Average Weekly Departure Delays',
+       x = 'Week of the Year',
+       y = 'Average Departure Delay (minutes)',
+       color = 'Year')+
+  facet_grid(~origin)
+
+#This calculates the average weekly departure delay in minutes for each airport with the two years being on the same graph. The average weekly departure delays show both airports witnessing an overall decrease in the delays of the flights. If observed more closely, JFK has overlaps of both years in delays whereas LAX has no overlaps at all. This implies that LAX has a slightly more significant decrease in comparison to JFK in regards to delay times. 
+
+#Number of flights
+combined_data %>%
+  mutate(week = week(time_hour)) %>% 
+  group_by(year, origin, week) %>%
+  summarize(flights = n(), .groups = 'drop') %>% 
+  ggplot(aes(x = week, y = flights, color = factor(year))) +
+  geom_line() +
+  theme_bw() +
+  labs(title = 'Weekly Flight Counts',
+       x = 'Week of the Year',
+       y = 'Number of Flights',
+       color = 'Year')+
+  facet_grid(~origin)
+
+#This calculates the number of weekly flights for both airports with the two years plotted onto the same graph. The weekly flight counts show decreases of at least 1000 flights for both airports. It is to be noted that LAX initially had a larger number of flights regardless of pandemic than JFK, but in the end both experience similar numbers of decreases. 
+
+flight_routes <- combined_data %>%
+  filter(year=="2019") %>% 
+  select(c("origin","dest")) %>% 
+  na.omit()
+route_counts <- flight_routes %>%
+  group_by(origin,dest) %>%
+  summarise(flight_count = n(), .groups = 'drop')
+flight_routes$route_id <- paste(flight_routes$origin, flight_routes$dest, sep = "-")
+unique_routes <- unique(flight_routes$route_id)
+unique_routes_frame<-data.frame(matrix(ncol = 0, nrow = length(unique_routes)))
+unique_routes_frame$origin<-substr(unique_routes, 1,3)
+unique_routes_frame$dest<-substr(unique_routes, 5,7)
+flight_routes <- unique_routes_frame %>%
+  left_join(airports, by = c("origin" = "faa")) %>%
+  rename(origin_lat = lat, origin_lon = lon) %>%
+  left_join(airports, by = c("dest" = "faa")) %>% 
+  rename(destination_lat = lat, destination_lon = lon) %>% 
+  select(c("origin","dest","origin_lat","origin_lon","destination_lat","destination_lon")) %>% 
+  na.omit()
+flight_routes<-left_join(flight_routes,route_counts)
+
+#Mapping
+us_map <- map_data("state")
+p <- ggplot() +
+  geom_polygon(data = us_map, aes(x = long, y = lat, group = group), fill = "gray", color = "white") +
+  theme_minimal()
+p <- p + geom_segment(data = flight_routes, aes(x = origin_lon, y = origin_lat, 
+                                                xend = destination_lon, yend = destination_lat,color = flight_count), 
+                         size = 0.4) +
+  scale_color_gradientn(name="flight count", colors=c("#00ff22","#82ba45","#c67d39","#e23d1d","#f11a0e","red","red","red","red","red","red","red"), limits=c(0,3500))+
+  labs(title="Flight routes in the first three months in 2019")
+
+print(p)
+
+
+
+flight_routes <- combined_data %>%
+  filter(year=="2021") %>% 
+  select(c("origin","dest")) %>% 
+  na.omit()
+route_counts <- flight_routes %>%
+  group_by(origin,dest) %>%
+  summarise(flight_count = n(), .groups = 'drop')
+flight_routes$route_id <- paste(flight_routes$origin, flight_routes$dest, sep = "-")
+unique_routes <- unique(flight_routes$route_id)
+unique_routes_frame<-data.frame(matrix(ncol = 0, nrow = length(unique_routes)))
+unique_routes_frame$origin<-substr(unique_routes, 1,3)
+unique_routes_frame$dest<-substr(unique_routes, 5,7)
+flight_routes <- unique_routes_frame %>%
+  left_join(airports, by = c("origin" = "faa")) %>%
+  rename(origin_lat = lat, origin_lon = lon) %>%
+  left_join(airports, by = c("dest" = "faa")) %>% 
+  rename(destination_lat = lat, destination_lon = lon) %>% 
+  select(c("origin","dest","origin_lat","origin_lon","destination_lat","destination_lon")) %>% 
+  na.omit()
+flight_routes<-left_join(flight_routes,route_counts)
+
+#Mapping
+us_map <- map_data("state")
+p <- ggplot() +
+  geom_polygon(data = us_map, aes(x = long, y = lat, group = group), fill = "gray", color = "white") +
+  theme_minimal()
+p <- p + geom_segment(data = flight_routes, aes(x = origin_lon, y = origin_lat, 
+                                                xend = destination_lon, yend = destination_lat,color = flight_count), 
+                         size = 0.4) +
+  scale_color_gradientn(name="flight count", colors=c("#00ff22","#82ba45","#c67d39","#e23d1d","#f11a0e","red","red","red","red","red","red","red"), limits=c(0,3500))+
+  labs(title="Flight routes in the first three months in 2021")
+
+print(p)
+
+#The maps aim to emphasize and visualize the departure of flight routes at the two airports for each year. The number of rays represent the flight routes and has not changed much before and after the pandemic. There shows to clearly be more red lines before the pandemic, of which the red lines represent high number of flights on the routes. The significant decrease in flights is mainly not due to reduction in routes but rather decrease in number of flights on each route. 
+
+```
+
+
+## 5. Implications and Conclusions
+The initial expectations were that in between the two years of 2019 and 2021, the number of flights would decrease, the average time of delays increase, and number of routes and number of flights per route to decrease. The findings do not align with these as we found that as the period of pandemic extended (including post-pandemic), the average delay time actually decrease and number of flights significantly decreased as pandemic peaked. In addition, the significant decrease in flights shown in the map graphs is mainly not due to a reduction in number of routes but rather decrease in number of flights per route. 
+
+These suggest numerous broader implications for the future. The decrease in delays during the pandemic could indicate potential long-term changes in travel behavior, such as a shift towards more efficient scheduling and operations. In addition, the decrease in delays holds environmental implications, as reduced air travel would result in lower carbon emissions. This highlights the environmental impact of travel and the potential for more sustainable practices in the future. Lastly, in terms of policy makers and airline companies, airlines should continue to prioritize the health and safety of passengers and crew by implementing robust health and safety protocols. They should maintain operational flexibility and agility to respond quickly to changing market conditions in case of another pandemic. 
+
+
+
+
+
+
+
