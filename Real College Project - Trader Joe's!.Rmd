@@ -1,0 +1,70 @@
+---
+title: "Where Are The Trader Joe's?"
+author: "Riley W"
+---
+
+```{r setup, include=FALSE}
+# Chunk 1: Load Libraries
+knitr::opts_chunk$set(echo = TRUE)
+library(maps)       
+library(tidyverse)   
+library(nycflights13) 
+library(plotly)     
+library(usdata)      
+
+# Chunk 2: Load Data
+states <- map_data("state")    # Map data for states
+county <- map_data("county")   # Map data for counties
+tj <- read.csv("tj-locations-3.csv") # Trader Joe's locations dataset
+
+# Chunk 3: Create Initial Plot
+p <- ggplot() +
+  geom_polygon(data = county, aes(x = long, y = lat, group = group), fill = "palegreen", color = "white") +
+  geom_polygon(data = states, aes(x = long, y = lat, group = group), fill = NA, color = "black") +
+  geom_point(data = tj, aes(x = longitude, y = latitude), na.rm = TRUE) +
+  labs(title = "Trader Joe's Locations in the US") +
+  coord_quickmap() + theme_void()
+
+ggplotly(p)
+```
+
+
+```{r}
+# Chunk 4: Summarize Trader Joe's Locations
+tj_new <- tj %>%
+  group_by(state) %>%
+  summarise(avg_latitude = mean(latitude),
+            avg_longitude = mean(longitude),
+            count = n())
+
+tj_new
+
+# Chunk 5: Create Plot with Summary Data
+p2 <- ggplot(states) +
+  geom_polygon(aes(x = long, y = lat, group = group), fill = "white", color = "black") + 
+  geom_point(data = tj_new, aes(x = avg_longitude, y = avg_latitude, color = count, size = count), na.rm = TRUE) + 
+  scale_color_gradient(low = "green", high = "darkblue") +
+  scale_size_continuous(range = c(1, 4)) +
+  coord_fixed(1.2) +
+  theme_void()
+
+ggplotly(p2)
+```
+
+```{r}
+# Chunk 6: Preprocess State Abbreviations
+tj_new <- tj_new %>%
+  mutate(state = abbr2state(state)) %>%
+  mutate(state = tolower(state)) 
+
+# Chunk 7: Merge Data with Map Dataset
+states_tj <- states %>% 
+  left_join(tj_new, by = c("region" = "state"))
+
+# Chunk 8: Final Plot
+ggplot(states_tj, aes(x = long, y = lat)) +
+  geom_polygon(aes(group = group, fill = count), color = "black") + 
+  scale_fill_gradient(low = "blue", high = "red") + 
+  theme_void() + coord_quickmap()
+
+```
